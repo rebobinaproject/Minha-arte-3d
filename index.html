@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oficina 3D — gerador de modelos 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#E6E9EF;--panel:#F7F8FA;--ink:#1D2230;--mute:#6A7286;--line:#CDD2DC;--acc:#3B5BDB;--acc-ink:#fff;--ok:#1F9D82;--err:#C2394B;--vp:#232B3B}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:15px/1.45 Manrope,system-ui,sans-serif;background:var(--bg);color:var(--ink);display:grid;grid-template-columns:330px 1fr;grid-template-rows:auto 1fr}
+header{grid-column:1/-1;display:flex;align-items:baseline;gap:14px;padding:14px 20px;border-bottom:1px solid var(--line)}
+header h1{font-size:20px;font-weight:800;margin:0;letter-spacing:-.02em}
+header span{color:var(--mute);font-size:13px}
+aside{background:var(--panel);border-right:1px solid var(--line);padding:18px;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.tabs{display:grid;grid-template-columns:1fr 1fr;background:var(--bg);border-radius:10px;padding:4px}
+.tabs button{border:0;background:none;padding:9px;border-radius:7px;font:600 14px Manrope,sans-serif;color:var(--mute);cursor:pointer}
+.tabs button[aria-selected=true]{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(29,34,48,.18)}
+label{font-weight:600;font-size:13px;display:block;margin-bottom:5px}
+textarea,input[type=text],input[type=password]{width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px;font:inherit;color:inherit}
+textarea{min-height:110px;resize:vertical}
+.drop{border:2px dashed var(--line);border-radius:10px;min-height:140px;display:grid;place-items:center;text-align:center;color:var(--mute);cursor:pointer;overflow:hidden;padding:8px}
+.drop.on{border-color:var(--acc)}
+.drop img{max-width:100%;max-height:180px;border-radius:6px}
+.btn{border:0;border-radius:9px;padding:12px 14px;font:800 15px Manrope,sans-serif;cursor:pointer;background:var(--acc);color:var(--acc-ink)}
+.btn.alt{background:var(--bg);color:var(--ink);font-weight:600}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+details{border-top:1px solid var(--line);padding-top:12px}
+summary{font-weight:600;cursor:pointer}
+details>div{display:grid;gap:10px;margin-top:10px}
+small{color:var(--mute);font-size:12px}
+main{display:grid;grid-template-rows:1fr auto;min-width:0;min-height:0}
+#vp{position:relative;background:var(--vp);min-height:320px}
+#vp canvas{display:block;width:100%;height:100%}
+#hud{position:absolute;left:14px;right:14px;top:14px;display:flex;justify-content:space-between;gap:10px;pointer-events:none}
+#status{background:rgba(247,248,250,.94);border-radius:8px;padding:7px 11px;font-weight:600;font-size:13px;max-width:70%}
+#bar{position:absolute;left:0;bottom:0;height:4px;background:var(--ok);width:0;transition:width .3s}
+#acts{display:flex;gap:8px;pointer-events:auto}
+#acts .btn{padding:8px 12px;font-size:13px}
+#hist{background:var(--panel);border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:10px;overflow-x:auto;min-height:74px;align-items:center}
+.it{flex:0 0 auto;border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 12px;text-align:left;font:inherit;cursor:pointer;max-width:200px}
+.it b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it small{display:block}
+.empty{color:var(--mute);font-size:13px}
+@media(max-width:820px){body{grid-template-columns:1fr;grid-template-rows:auto auto 1fr}aside{border-right:0;border-bottom:1px solid var(--line)}#vp{min-height:60vh}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><h1>Oficina 3D</h1><span>Texto ou imagem para modelo 3D</span></header>
+
+<aside>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="t-text" aria-selected="true">Texto para 3D</button>
+    <button role="tab" id="t-img" aria-selected="false">Imagem para 3D</button>
+  </div>
+
+  <div id="p-text">
+    <label for="prompt">Descreva o objeto</label>
+    <textarea id="prompt" placeholder="Ex.: robô de brinquedo retrô, corpo de lata, olhos redondos"></textarea>
+  </div>
+  <div id="p-img" hidden>
+    <label>Imagem de referência</label>
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Escolher imagem">Toque ou arraste uma imagem aqui</div>
+    <input type="file" id="file" accept="image/*" hidden>
+  </div>
+
+  <button class="btn" id="go">Gerar modelo</button>
+  <button class="btn alt" id="open">Abrir arquivo .glb do computador</button>
+  <input type="file" id="glbfile" accept=".glb,.gltf" hidden>
+
+  <details>
+    <summary>Motor de geração</summary>
+    <div>
+      <div><label for="engine">Motor</label>
+        <select id="engine" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line)">
+          <option value="demo">Demonstração (sem IA, offline)</option>
+          <option value="tripo">API do Tripo</option>
+        </select></div>
+      <div><label for="base">Endereço da API ou do seu proxy</label>
+        <input type="text" id="base" value="https://api.tripo3d.ai/v2/openapi"></div>
+      <div><label for="key">Chave de API</label>
+        <input type="password" id="key" autocomplete="off"></div>
+      <div><label for="ver">Versão do modelo</label>
+        <input type="text" id="ver" value="H3.1"></div>
+      <small>A chave fica só na memória desta aba. Em um site público, use um proxy seu para não expor a chave.</small>
+    </div>
+  </details>
+</aside>
+
+<main>
+  <div id="vp">
+    <div id="hud"><div id="status">Pronto. Gere um modelo ou abra um .glb.</div>
+      <div id="acts"><button class="btn alt" id="spin">Girar</button><button class="btn" id="dl" disabled>Baixar GLB</button></div></div>
+    <div id="bar"></div>
+  </div>
+  <div id="hist"><span class="empty">Seus modelos aparecem aqui.</span></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let mode='text',imgFile=null,current=null,history=[];
+try{history=JSON.parse(localStorage.getItem('o3d')||'[]')}catch(e){}
+
+/* ---------- Visualizador ---------- */
+const vp=$('vp'),renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));vp.prepend(renderer.domElement);
+const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(45,1,.01,1000);
+camera.position.set(2.2,1.6,2.8);
+const ctl=new THREE.OrbitControls(camera,renderer.domElement);ctl.enableDamping=true;ctl.autoRotate=true;ctl.autoRotateSpeed=1.6;
+scene.add(new THREE.HemisphereLight(0xffffff,0x39425a,.9));
+const sun=new THREE.DirectionalLight(0xffffff,.9);sun.position.set(3,5,4);scene.add(sun);
+const grid=new THREE.GridHelper(6,24,0x4a566e,0x333d52);scene.add(grid);
+let obj=null;
+function size(){const w=vp.clientWidth,h=vp.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix()}
+addEventListener('resize',size);size();
+(function loop(){requestAnimationFrame(loop);ctl.update();renderer.render(scene,camera)})();
+
+function show(o){
+  if(obj)scene.remove(obj);
+  const box=new THREE.Box3().setFromObject(o),c=box.getCenter(new THREE.Vector3()),s=box.getSize(new THREE.Vector3());
+  const k=2/Math.max(s.x,s.y,s.z||1);o.scale.multiplyScalar(k);o.position.sub(c.multiplyScalar(k));
+  o.position.y+=(s.y*k)/2;grid.position.y=0;obj=o;scene.add(o);
+}
+function loadGLB(url,done){
+  new THREE.GLTFLoader().load(url,g=>{show(g.scene);done&&done()},undefined,()=>say('Não foi possível abrir este arquivo 3D.',true));
+}
+
+/* ---------- Estado e interface ---------- */
+function say(t,err){const s=$('status');s.textContent=t;s.style.color=err?'var(--err)':''}
+function prog(p){$('bar').style.width=p+'%'}
+function setMode(m){mode=m;$('t-text').setAttribute('aria-selected',m==='text');$('t-img').setAttribute('aria-selected',m==='img');$('p-text').hidden=m!=='text';$('p-img').hidden=m!=='img'}
+$('t-text').onclick=()=>setMode('text');$('t-img').onclick=()=>setMode('img');
+$('spin').onclick=()=>{ctl.autoRotate=!ctl.autoRotate};
+$('dl').onclick=()=>{if(current&&current.url){const a=document.createElement('a');a.href=current.url;a.download=(current.title||'modelo')+'.glb';a.target='_blank';a.click()}};
+
+const drop=$('drop');
+drop.onclick=()=>$('file').click();
+drop.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')$('file').click()};
+drop.ondragover=e=>{e.preventDefault();drop.classList.add('on')};
+drop.ondragleave=()=>drop.classList.remove('on');
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove('on');pick(e.dataTransfer.files[0])};
+$('file').onchange=e=>pick(e.target.files[0]);
+function pick(f){if(!f||!f.type.startsWith('image/'))return say('Escolha um arquivo de imagem.',true);imgFile=f;drop.innerHTML='';const i=new Image();i.src=URL.createObjectURL(f);drop.append(i)}
+
+$('open').onclick=()=>$('glbfile').click();
+$('glbfile').onchange=e=>{const f=e.target.files[0];if(!f)return;const u=URL.createObjectURL(f);
+  loadGLB(u,()=>{current={title:f.name.replace(/\.[^.]+$/,''),url:u};$('dl').disabled=false;say('Modelo aberto: '+f.name)})};
+
+function renderHist(){
+  const h=$('hist');h.innerHTML='';
+  if(!history.length){h.innerHTML='<span class="empty">Seus modelos aparecem aqui.</span>';return}
+  history.slice().reverse().forEach(it=>{const b=document.createElement('button');b.className='it';
+    b.innerHTML='<b></b><small></small>';b.firstChild.textContent=it.title;b.lastChild.textContent=it.kind;
+    b.onclick=()=>openItem(it);h.append(b)});
+}
+function save(){try{localStorage.setItem('o3d',JSON.stringify(history.slice(-12)))}catch(e){}}
+function openItem(it){
+  current=it;$('dl').disabled=!it.url;
+  if(it.url)loadGLB(it.url,()=>say('Modelo carregado: '+it.title));
+  else{show(demoMesh(it.seed));say('Modelo de demonstração: '+it.title)}
+}
+
+/* ---------- Motores ---------- */
+function hash(s){let h=2166136261;for(const c of s){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
+function demoMesh(seed){
+  const g=[new THREE.TorusKnotGeometry(.6,.2,128,16),new THREE.IcosahedronGeometry(.9,1),new THREE.OctahedronGeometry(.9),new THREE.CylinderGeometry(.5,.9,1.4,6)][seed%4];
+  const m=new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL((seed%360)/360,.55,.55),roughness:.45,flatShading:seed%2===0});
+  return new THREE.Mesh(g,m);
+}
+async function demoEngine(input,onProgress){
+  for(let i=1;i<=10;i++){await new Promise(r=>setTimeout(r,250));onProgress(i*10)}
+  return {seed:hash(input)};
+}
+/* Tripo: confira os campos exatos na documentação oficial da API antes de usar. */
+async function tripoEngine(input,onProgress){
+  const base=$('base').value.replace(/\/$/,''),H={Authorization:'Bearer '+$('key').value};
+  if(!$('key').value)throw new Error('Informe a chave de API em "Motor de geração".');
+  let body;
+  if(mode==='text'){body={type:'text_to_model',model_version:$('ver').value,prompt:input}}
+  else{
+    const fd=new FormData();fd.append('file',imgFile);
+    const up=await fetch(base+'/upload',{method:'POST',headers:H,body:fd}).then(r=>r.json());
+    const tok=up.data&&(up.data.image_token||up.data.file_token);
+    if(!tok)throw new Error('Falha ao enviar a imagem.');
+    body={type:'image_to_model',model_version:$('ver').value,file:{type:imgFile.type.split('/')[1],file_token:tok}};
+  }
+  const c=await fetch(base+'/task',{method:'POST',headers:{...H,'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
+  const id=c.data&&c.data.task_id;if(!id)throw new Error(c.message||'A API não aceitou o pedido.');
+  for(;;){
+    await new Promise(r=>setTimeout(r,2000));
+    const t=(await fetch(base+'/task/'+id,{headers:H}).then(r=>r.json())).data;
+    onProgress(t.progress||0);
+    if(t.status==='success'){const o=t.output||{};return {url:o.pbr_model||o.model}}
+    if(['failed','cancelled','banned','expired'].includes(t.status))throw new Error('A geração falhou ('+t.status+').');
+  }
+}
+
+$('go').onclick=async()=>{
+  const text=$('prompt').value.trim();
+  if(mode==='text'&&!text)return say('Escreva uma descrição antes de gerar.',true);
+  if(mode==='img'&&!imgFile)return say('Escolha uma imagem antes de gerar.',true);
+  const input=mode==='text'?text:imgFile.name+imgFile.size;
+  $('go').disabled=true;prog(0);say('Gerando…');
+  try{
+    const res=await($('engine').value==='tripo'?tripoEngine:demoEngine)(input,p=>{prog(p);say('Gerando… '+Math.round(p)+'%')});
+    const it={title:(mode==='text'?text:imgFile.name).slice(0,40),kind:mode==='text'?'Texto':'Imagem',url:res.url||null,seed:res.seed};
+    history.push(it);save();renderHist();openItem(it);prog(100);
+  }catch(e){say(e.message,true);prog(0)}
+  $('go').disabled=false;
+};
+renderHist();
+</script>
+</body>
+</html>
